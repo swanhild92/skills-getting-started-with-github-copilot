@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // Reset activity select to the default option
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -20,10 +22,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
-        const participantsList = details.participants.length > 0
-          ? `<ul>${details.participants.map(p => `<li>${p}</li>`).join('')}</ul>`
-          : '<p class="no-participants">No participants yet</p>';
-
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
@@ -31,11 +29,66 @@ document.addEventListener("DOMContentLoaded", () => {
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
           <div class="participants-section">
             <h5>Participants (${details.participants.length}/${details.max_participants})</h5>
-            ${participantsList}
+            <div class="participants-list"></div>
           </div>
         `;
 
         activitiesList.appendChild(activityCard);
+
+        // Render participants with delete button next to each
+        const participantsContainer = activityCard.querySelector('.participants-list');
+        if (details.participants.length > 0) {
+          const ul = document.createElement('ul');
+          details.participants.forEach(p => {
+            const li = document.createElement('li');
+            li.className = 'participant-item';
+
+            const span = document.createElement('span');
+            span.className = 'participant-email';
+            span.textContent = p;
+
+            const btn = document.createElement('button');
+            btn.className = 'delete-participant';
+            btn.type = 'button';
+            btn.title = `Unregister ${p}`;
+            btn.textContent = '✖';
+            btn.dataset.activity = name;
+            btn.dataset.email = p;
+
+            btn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              const activityName = ev.currentTarget.dataset.activity;
+              const email = ev.currentTarget.dataset.email;
+              try {
+                const res = await fetch(`/activities/${encodeURIComponent(activityName)}/unregister?email=${encodeURIComponent(email)}`, {
+                  method: 'POST'
+                });
+                const result = await res.json();
+                if (res.ok) {
+                  fetchActivities();
+                } else {
+                  messageDiv.textContent = result.detail || 'Failed to unregister participant';
+                  messageDiv.className = 'error';
+                  messageDiv.classList.remove('hidden');
+                  setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+                }
+              } catch (err) {
+                console.error('Error unregistering:', err);
+                messageDiv.textContent = 'Failed to unregister participant';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+              }
+            });
+
+            li.appendChild(span);
+            li.appendChild(btn);
+            ul.appendChild(li);
+          });
+          participantsContainer.appendChild(ul);
+        } else {
+          participantsContainer.innerHTML = '<p class="no-participants">No participants yet</p>';
+        }
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -70,6 +123,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities so the UI shows updated participants/availability
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
